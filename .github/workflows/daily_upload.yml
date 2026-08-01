@@ -1,0 +1,44 @@
+name: Daily Shorts Auto Upload
+
+on:
+  schedule:
+    # 매일 UTC 22:00 = 한국시간 07:00 / 미국 동부 기준 오후~저녁대 업로드 타이밍
+    - cron: "0 22 * * *"
+  workflow_dispatch: {}   # 수동으로도 실행 가능 (Actions 탭에서 Run workflow 버튼)
+
+jobs:
+  create-and-upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 시스템 패키지 설치 (ffmpeg, 폰트)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-dejavu-core
+
+      - name: 파이썬 패키지 설치
+        run: pip install -r requirements.txt
+
+      - name: 시크릿 파일 복원
+        run: |
+          echo "${{ secrets.YOUTUBE_CLIENT_SECRET_B64 }}" | base64 -d > client_secret.json
+          echo "${{ secrets.YOUTUBE_TOKEN_B64 }}" | base64 -d > token.json
+
+      - name: 파이프라인 실행
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          YOUTUBE_PRIVACY_STATUS: ${{ secrets.YOUTUBE_PRIVACY_STATUS }}
+          DISCLOSE_SYNTHETIC_MEDIA: "true"
+        run: python main.py
+
+      - name: 다음 실행을 위해 used_topics.json 커밋
+        run: |
+          git config user.name "shorts-bot"
+          git config user.email "shorts-bot@users.noreply.github.com"
+          git add used_topics.json
+          git commit -m "chore: update used topics" || echo "변경사항 없음"
+          git push
